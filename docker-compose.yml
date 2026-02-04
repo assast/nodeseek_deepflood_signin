@@ -1,0 +1,12 @@
+
+services:
+  nodeseek-signin:
+    image: ghcr.io/assast/nodeseek-signin:latest
+    container_name: nodeseek-signin
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # 时区设置
+      - TZ=Asia/Shanghai
+
