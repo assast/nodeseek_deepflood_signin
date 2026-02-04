@@ -1,8 +1,8 @@
 
 services:
-  nodeseek-signin:
-    image: ghcr.io/assast/nodeseek-signin:latest
-    container_name: nodeseek-signin
+  nodeseek_deepflood_signin:
+    image: ghcr.io/assast/nodeseek_deepflood_signin:latest
+    container_name: nodeseek_deepflood_signin
     restart: unless-stopped
     env_file:
       - .env

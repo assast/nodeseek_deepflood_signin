@@ -134,12 +134,12 @@ docker run --rm \
   -e TG_BOT_ENABLE=true \
   -e TG_BOT_TOKEN="你的Bot Token" \
   -e TG_CHAT_ID="你的Chat ID" \
-  ghcr.io/assast/nodeseek-signin:latest
+  ghcr.io/assast/nodeseek_deepflood_signin:latest
 ```
 
 ### 镜像说明
 
-- **镜像地址**：`ghcr.io/assast/nodeseek-signin:latest`
+- **镜像地址**：`ghcr.io/assast/nodeseek_deepflood_signin:latest`
 - **支持架构**：amd64、arm64（支持树莓派等ARM设备）
 - **自动构建**：每次推送到 main 分支自动构建并推送到 GitHub Container Registry
 - **镜像标签**：
