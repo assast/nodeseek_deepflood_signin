@@ -10,6 +10,7 @@
 
 - 支持随机/固定签到模式
 - 查询用户等级、鸡腿数、发帖数等数据
+- **内置定时任务**：支持每天在指定时间范围内随机执行（默认8~9点，可通过环境变量配置）
 - 支持代理配置，实现本地或国内请求或者部署（支持自动轮换代理列表，避免IP 被阻止请求）
 - 钉钉机器人、Telegram机器人、企业微信机器人、邮箱、Server酱、PushDeer等等通知签到结果（调用青龙通知API，具体自行测试）
 - 支持青龙面板部署、Docker容器化部署、本地运行（本地支持钉钉和Telegram机器人通知）
@@ -50,6 +51,8 @@ git+https://github.com/VeNoMouS/cloudscraper.git
 | `DF_COOKIE`     | 是   | 无     | NodeSeek 登录 Cookie，F12 控制台获取          |
 | `DF_RANDOM`     | 否   | true   | 签到模式: true(随机鸡腿)/false(固定5个鸡腿)   |
 | `DF_MEMBER_ID`  | 否   | 无     | 成员ID，用于查询账户信息(空间页URL中的数字ID) |
+| `SCHEDULE_START_HOUR` | 否 | 8    | 定时任务开始时间（小时，0-23）                |
+| `SCHEDULE_END_HOUR`   | 否 | 9    | 定时任务结束时间（小时，0-23）                |
 | `PROXIES`    | 否   | 无     | 代理配置：http/https，多个请用","英文逗号隔开 |
 | `DD_BOT_TOKEN`  | 否   | 无     | 钉钉机器人 access_token 的 Token 部分         |
 | `DD_BOT_SECRET` | 否   | 无     | 钉钉机器人加签密钥(选择加签安全模式时需要)    |
@@ -74,6 +77,10 @@ NS_RANDOM=true
 DF_COOKIE=你的Cookie
 DF_MEMBER_ID=你的成员ID
 DF_RANDOM=true
+
+# 定时任务配置（可选）
+SCHEDULE_START_HOUR=8
+SCHEDULE_END_HOUR=9
 
 # 代理配置（可选）
 PROXIES=http://127.0.0.1:7890,https://127.0.0.1:7890
@@ -101,41 +108,35 @@ wget https://raw.githubusercontent.com/assast/nodeseek_deepflood_signin/main/doc
 3. **启动容器**
 
 ```bash
-# 一次性运行
-docker-compose up
-
-# 后台运行
+# 后台运行（推荐）
 docker-compose up -d
 
 # 查看日志
 docker-compose logs -f
+
+# 停止容器
+docker-compose down
 ```
 
-4. **配置定时任务**
-
-使用宿主机的 crontab 定时启动容器：
-
-```bash
-# 编辑定时任务
-crontab -e
-
-# 添加以下内容（每天凌晨2点20分执行）
-20 2 * * * cd /path/to/docker-compose-dir && docker-compose up >> /path/to/logs/signin.log 2>&1
-```
+**说明**：程序内置定时任务，容器启动后会自动在每天配置的时间范围内随机执行签到（默认8~9点）。无需配置外部 crontab。
 
 ### 方式二：直接使用 docker run
 
 ```bash
-docker run --rm \
+docker run -d --name nodeseek_signin --restart unless-stopped \
   -e NS_COOKIE="你的Cookie" \
   -e NS_MEMBER_ID="你的成员ID" \
   -e DF_COOKIE="你的Cookie" \
   -e DF_MEMBER_ID="你的成员ID" \
+  -e SCHEDULE_START_HOUR=8 \
+  -e SCHEDULE_END_HOUR=9 \
   -e TG_BOT_ENABLE=true \
   -e TG_BOT_TOKEN="你的Bot Token" \
   -e TG_CHAT_ID="你的Chat ID" \
   ghcr.io/assast/nodeseek_deepflood_signin:latest
 ```
+
+**说明**：使用 `-d` 参数后台运行，`--restart unless-stopped` 确保容器自动重启。程序内置定时任务，无需外部 crontab。
 
 ### 镜像说明
 
@@ -201,6 +202,10 @@ DF_COOKIE=你的Cookie
 DF_MEMBER_ID=你的成员ID
 DF_RANDOM=true
 
+# 定时任务配置（可选）
+SCHEDULE_START_HOUR=8
+SCHEDULE_END_HOUR=9
+
 # 代理配置（可选，国内服务器建议配置）
 PROXIES=http://127.0.0.1:7890,https://127.0.0.1:7890
 
@@ -233,28 +238,44 @@ export $(cat .env | xargs)
 python main.py
 ```
 
-### 5. 定时任务设置（可选）
+**说明**：程序内置定时任务，启动后会自动在每天配置的时间范围内随机执行签到（默认8~9点）。程序会持续运行，无需配置外部定时任务。
 
-**macOS/Linux - 使用 crontab**
-
+如需修改执行时间范围，可在 `.env` 文件中配置：
 ```bash
-# 编辑定时任务
-crontab -e
-
-# 添加以下内容（每天凌晨2点20分执行）
-20 2 * * * cd /path/to/nodeseek_deepflood_signin && /usr/bin/python3 main.py >> /path/to/logs/signin.log 2>&1
+SCHEDULE_START_HOUR=8  # 开始时间（小时）
+SCHEDULE_END_HOUR=9    # 结束时间（小时）
 ```
 
-**Windows - 使用任务计划程序**
+### 5. 后台运行（可选）
 
-1. 打开"任务计划程序"
-2. 创建基本任务
-3. 设置触发器为每天凌晨2点20分
-4. 操作选择"启动程序"，填入 Python 路径和 main.py 路径
+**macOS/Linux - 使用 nohup**
+
+```bash
+nohup python main.py > signin.log 2>&1 &
+```
+
+**使用 screen 或 tmux**
+
+```bash
+# 使用 screen
+screen -S signin
+python main.py
+# 按 Ctrl+A+D 退出 screen
+
+# 使用 tmux
+tmux new -s signin
+python main.py
+# 按 Ctrl+B+D 退出 tmux
+```
 
 ## 📝 注意事项
 
 - 推荐使用海外服务器部署，国内服务器请设置代理，否则可能无法访问导致签到失败。
+- **定时任务说明**：
+  - 程序内置定时任务功能，启动后会自动在每天配置的时间范围内随机执行签到
+  - 默认执行时间：每天 8~9 点之间随机时间
+  - 可通过环境变量 `SCHEDULE_START_HOUR` 和 `SCHEDULE_END_HOUR` 自定义时间范围
+  - Docker 部署和本地运行都支持此功能，无需配置外部 crontab
 - **Docker 部署**（推荐）：支持钉钉和 Telegram 机器人通知，配置简单，一键启动。
 - **本地运行**：支持钉钉和 Telegram 机器人通知，需设置 `DD_BOT_ENABLE=true` 或 `TG_BOT_ENABLE=true` 并配置相关参数。
 - **青龙面板**：开启通知需在青龙面板 -> 系统设置 -> 通知设置 -> 设置通知方式，配置相关选项。

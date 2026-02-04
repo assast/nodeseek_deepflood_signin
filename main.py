@@ -2,7 +2,7 @@
 # new Env('NS&DF一体化签到');
 """
 NodeSeek&DeepFlood论坛-自动签到Cookie版
-Version: 1.1.0
+Version: 1.2.0
 create Time: 2025-5-13 16:21:43
 Last Updated: 2025-10-2 15:30:00
 Author: G.E.N.G
@@ -16,6 +16,7 @@ import os
 import random
 import time
 import urllib.parse
+from datetime import datetime, timedelta
 
 import cloudscraper
 
@@ -102,6 +103,10 @@ class EnvConfig:
     df_random = os.environ.get("DF_RANDOM", "true").lower() == "true"  # 随机签到开关
     df_member_id = os.environ.get("DF_MEMBER_ID", "")  # 成员ID（从个人空间URL获取）
 
+    # 定时任务配置
+    schedule_start_hour = int(os.environ.get("SCHEDULE_START_HOUR", "8"))  # 开始时间（小时）
+    schedule_end_hour = int(os.environ.get("SCHEDULE_END_HOUR", "9"))  # 结束时间（小时）
+
     # 钉钉通知配置
     dd_bot_enable = (
         os.environ.get("DD_BOT_ENABLE", "false").lower() == "true"
@@ -140,6 +145,51 @@ def random_wait(min_sec, max_sec):
 def get_current_time():
     """获取当前时间的格式化字符串"""
     return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+
+
+def calculate_next_run_time():
+    """
+    计算下次执行时间（在配置的时间范围内随机）
+
+    :return: 下次执行的datetime对象
+    """
+    now = datetime.now()
+
+    # 生成今天的随机执行时间
+    random_hour = env.schedule_start_hour
+    random_minute = random.randint(0, 59)
+    random_second = random.randint(0, 59)
+
+    # 如果时间范围跨度大于1小时，随机选择小时
+    if env.schedule_end_hour > env.schedule_start_hour:
+        # 在开始和结束小时之间随机（不包括结束小时）
+        random_hour = random.randint(env.schedule_start_hour, env.schedule_end_hour - 1)
+        # 如果随机到了最后一个小时区间，分钟数限制在0-59
+        if random_hour == env.schedule_end_hour - 1:
+            random_minute = random.randint(0, 59)
+
+    today_run_time = now.replace(hour=random_hour, minute=random_minute, second=random_second, microsecond=0)
+
+    # 如果今天的执行时间已过，则计算明天的执行时间
+    if now >= today_run_time:
+        next_run_time = today_run_time + timedelta(days=1)
+    else:
+        next_run_time = today_run_time
+
+    return next_run_time
+
+
+def wait_until_next_run():
+    """等待到下次执行时间"""
+    next_run_time = calculate_next_run_time()
+    now = datetime.now()
+    wait_seconds = (next_run_time - now).total_seconds()
+
+    print(f"当前时间：{get_current_time()}")
+    print(f"下次执行时间：{next_run_time.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"等待时长：{wait_seconds:.0f}秒（约{wait_seconds/3600:.2f}小时）")
+
+    time.sleep(wait_seconds)
 
 
 # ==============================================
@@ -471,29 +521,55 @@ def run_forum_signin(forum, forum_name):
 
 def main():
     """主程序入口"""
-    # 执行NodeSeek签到
-    if env.ns_cookie:  # 只有配置了Cookie才执行
-        nodeseek = NodeSeekForum(
-            base_url=NODESEEK_URL,
-            cookie=env.ns_cookie,
-            member_id=env.ns_member_id,
-            random_signin=env.ns_random,
-        )
-        run_forum_signin(nodeseek, "NodeSeek")
-    else:
-        print("未配置NodeSeek的Cookie（NS_COOKIE），跳过NodeSeek签到")
+    print("=" * 60)
+    print("NodeSeek & DeepFlood 自动签到程序启动")
+    print(f"定时配置：每天 {env.schedule_start_hour}~{env.schedule_end_hour} 点之间随机执行")
+    print("=" * 60)
 
-    # 执行DeepFlood签到
-    if env.df_cookie:  # 只有配置了Cookie才执行
-        deepflood = DeepFloodForum(
-            base_url=DEEPFLOOD_URL,
-            cookie=env.df_cookie,
-            member_id=env.df_member_id,
-            random_signin=env.df_random,
-        )
-        run_forum_signin(deepflood, "DeepFlood")
-    else:
-        print("未配置DeepFlood的Cookie（DF_COOKIE），跳过DeepFlood签到")
+    while True:
+        try:
+            # 等待到下次执行时间
+            wait_until_next_run()
+
+            print("\n" + "=" * 60)
+            print(f"开始执行签到任务 - {get_current_time()}")
+            print("=" * 60)
+
+            # 执行NodeSeek签到
+            if env.ns_cookie:
+                nodeseek = NodeSeekForum(
+                    base_url=NODESEEK_URL,
+                    cookie=env.ns_cookie,
+                    member_id=env.ns_member_id,
+                    random_signin=env.ns_random,
+                )
+                run_forum_signin(nodeseek, "NodeSeek")
+            else:
+                print("未配置NodeSeek的Cookie（NS_COOKIE），跳过NodeSeek签到")
+
+            # 执行DeepFlood签到
+            if env.df_cookie:
+                deepflood = DeepFloodForum(
+                    base_url=DEEPFLOOD_URL,
+                    cookie=env.df_cookie,
+                    member_id=env.df_member_id,
+                    random_signin=env.df_random,
+                )
+                run_forum_signin(deepflood, "DeepFlood")
+            else:
+                print("未配置DeepFlood的Cookie（DF_COOKIE），跳过DeepFlood签到")
+
+            print("=" * 60)
+            print(f"签到任务执行完成 - {get_current_time()}")
+            print("=" * 60 + "\n")
+
+        except KeyboardInterrupt:
+            print("\n程序被用户中断")
+            break
+        except Exception as e:
+            print(f"\n执行出错：{str(e)}")
+            print("等待5分钟后重试...")
+            time.sleep(300)
 
 
 if __name__ == "__main__":
