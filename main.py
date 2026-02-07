@@ -125,6 +125,9 @@ class EnvConfig:
 # 实例化配置对象
 env = EnvConfig()
 
+# 记录上次执行签到的日期（用于防止同一天重复签到）
+last_run_date = None
+
 
 # ==============================================
 # 工具函数（Utility Functions）
@@ -147,15 +150,16 @@ def get_current_time():
     return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
 
 
-def calculate_next_run_time():
+def calculate_next_run_time(force_tomorrow=False):
     """
     计算下次执行时间（在配置的时间范围内随机）
 
+    :param force_tomorrow: 是否强制返回明天的执行时间（防止同一天重复签到）
     :return: 下次执行的datetime对象
     """
     now = datetime.now()
 
-    # 生成今天的随机执行时间
+    # 生成随机执行时间
     random_hour = env.schedule_start_hour
     random_minute = random.randint(0, 59)
     random_second = random.randint(0, 59)
@@ -170,8 +174,8 @@ def calculate_next_run_time():
 
     today_run_time = now.replace(hour=random_hour, minute=random_minute, second=random_second, microsecond=0)
 
-    # 如果今天的执行时间已过，则计算明天的执行时间
-    if now >= today_run_time:
+    # 如果强制明天执行，或者今天的执行时间已过，则计算明天的执行时间
+    if force_tomorrow or now >= today_run_time:
         next_run_time = today_run_time + timedelta(days=1)
     else:
         next_run_time = today_run_time
@@ -181,8 +185,16 @@ def calculate_next_run_time():
 
 def wait_until_next_run():
     """等待到下次执行时间"""
-    next_run_time = calculate_next_run_time()
+    global last_run_date
     now = datetime.now()
+    today = now.date()
+
+    # 检查今天是否已经执行过签到
+    force_tomorrow = (last_run_date == today)
+    if force_tomorrow:
+        print("今天已执行过签到，将等待到明天执行...")
+
+    next_run_time = calculate_next_run_time(force_tomorrow=force_tomorrow)
     wait_seconds = (next_run_time - now).total_seconds()
 
     print(f"当前时间：{get_current_time()}")
@@ -558,6 +570,10 @@ def main():
                 run_forum_signin(deepflood, "DeepFlood")
             else:
                 print("未配置DeepFlood的Cookie（DF_COOKIE），跳过DeepFlood签到")
+
+            # 更新上次执行日期（防止同一天重复签到）
+            global last_run_date
+            last_run_date = datetime.now().date()
 
             print("=" * 60)
             print(f"签到任务执行完成 - {get_current_time()}")
