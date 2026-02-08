@@ -50,8 +50,77 @@ INFO_WAIT_MAX = 20
 # ==============================================
 # 初始化网络请求器（Initialize Network Scraper）
 # ==============================================
+# 存储当前使用的代理列表（用于通知显示）
+current_proxies = []
+
+
+def mask_proxy(proxy_url):
+    """
+    对代理URL进行模糊化处理
+    
+    :param proxy_url: 原始代理URL（如 http://192.168.1.100:8080）
+    :return: 模糊化后的代理URL（如 http://192.***.***.100:****）
+    """
+    import re
+    
+    if not proxy_url:
+        return "无"
+    
+    # 匹配 协议://用户名:密码@主机:端口 或 协议://主机:端口 格式
+    # 支持 http://user:pass@1.2.3.4:8080 和 http://1.2.3.4:8080 格式
+    pattern = r'^(https?://)(?:([^:]+):([^@]+)@)?([^:]+):(\d+)(.*)$'
+    match = re.match(pattern, proxy_url)
+    
+    if match:
+        protocol = match.group(1)  # http:// 或 https://
+        username = match.group(2)  # 用户名（可能为None）
+        password = match.group(3)  # 密码（可能为None）
+        host = match.group(4)      # 主机（IP或域名）
+        port = match.group(5)      # 端口
+        rest = match.group(6) or ""  # 其他路径
+        
+        # 模糊化主机（IP地址或域名）
+        if re.match(r'^\d+\.\d+\.\d+\.\d+$', host):
+            # IPv4地址：显示第一段和最后一段，中间用***替代
+            parts = host.split('.')
+            masked_host = f"{parts[0]}.***.***.{parts[3]}"
+        else:
+            # 域名：显示最后两段
+            parts = host.split('.')
+            if len(parts) > 2:
+                masked_host = f"***.{'.'.join(parts[-2:])}"
+            else:
+                masked_host = host
+        
+        # 构建模糊化的代理URL（不显示用户名密码，端口完整展示）
+        if username:
+            return f"{protocol}***:***@{masked_host}:{port}{rest}"
+        return f"{protocol}{masked_host}:{port}{rest}"
+    
+    # 如果不匹配标准格式，返回部分模糊化的原始内容
+    return proxy_url[:10] + "***" if len(proxy_url) > 10 else "***"
+
+
+def get_masked_proxies_info():
+    """
+    获取模糊化的代理信息字符串
+    
+    :return: 模糊化的代理信息
+    """
+    if not current_proxies:
+        return "直连"
+    
+    masked = [mask_proxy(p) for p in current_proxies[:3]]  # 最多显示3个代理
+    result = ", ".join(masked)
+    if len(current_proxies) > 3:
+        result += f" 等{len(current_proxies)}个"
+    return result
+
+
 def init_scraper():
     """初始化cloudscraper实例，用于处理带Cloudflare验证的请求"""
+    global current_proxies
+    
     # 从环境变量获取代理（格式：http://ip:port,https://ip:port）
     proxies = []
     ns_proxies = os.environ.get("NS_PROXIES", "")
@@ -60,6 +129,9 @@ def init_scraper():
 
     if ns_proxies:
         proxies = [proxy.strip() for proxy in ns_proxies.split(",") if proxy.strip()]
+    
+    # 保存代理列表供通知使用
+    current_proxies = proxies
 
     # 配置scraper参数，模拟浏览器行为以绕过反爬
     return cloudscraper.create_scraper(
@@ -479,6 +551,7 @@ def push_notification(forum_name, info, sign_result):
         f"【{forum_name}】\n"
         f"{info}\n"
         f"{sign_result}\n"
+        f"使用代理：{get_masked_proxies_info()}\n"
         f"操作时间：{get_current_time()}"
     )
 
