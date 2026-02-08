@@ -19,7 +19,7 @@ ENV/
 *.swo
 
 # 环境变量
-.env
+*.env
 
 # 日志
 *.log
