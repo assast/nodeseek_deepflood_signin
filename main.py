@@ -106,6 +106,7 @@ class EnvConfig:
     # 定时任务配置
     schedule_start_hour = int(os.environ.get("SCHEDULE_START_HOUR", "8"))  # 开始时间（小时）
     schedule_end_hour = int(os.environ.get("SCHEDULE_END_HOUR", "9"))  # 结束时间（小时）
+    run_on_start = os.environ.get("RUN_ON_START", "false").lower() == "true"  # 启动时是否立即执行一次签到
 
     # 钉钉通知配置
     dd_bot_enable = (
@@ -531,12 +532,60 @@ def run_forum_signin(forum, forum_name):
     print(f"======================= {forum_name}签到流程结束 =======================\n")
 
 
+def run_signin_task():
+    """执行签到任务"""
+    print("\n" + "=" * 60)
+    print(f"开始执行签到任务 - {get_current_time()}")
+    print("=" * 60)
+
+    # 执行NodeSeek签到
+    if env.ns_cookie:
+        nodeseek = NodeSeekForum(
+            base_url=NODESEEK_URL,
+            cookie=env.ns_cookie,
+            member_id=env.ns_member_id,
+            random_signin=env.ns_random,
+        )
+        run_forum_signin(nodeseek, "NodeSeek")
+    else:
+        print("未配置NodeSeek的Cookie（NS_COOKIE），跳过NodeSeek签到")
+
+    # 执行DeepFlood签到
+    if env.df_cookie:
+        deepflood = DeepFloodForum(
+            base_url=DEEPFLOOD_URL,
+            cookie=env.df_cookie,
+            member_id=env.df_member_id,
+            random_signin=env.df_random,
+        )
+        run_forum_signin(deepflood, "DeepFlood")
+    else:
+        print("未配置DeepFlood的Cookie（DF_COOKIE），跳过DeepFlood签到")
+
+    # 更新上次执行日期（防止同一天重复签到）
+    global last_run_date
+    last_run_date = datetime.now().date()
+
+    print("=" * 60)
+    print(f"签到任务执行完成 - {get_current_time()}")
+    print("=" * 60 + "\n")
+
+
 def main():
     """主程序入口"""
     print("=" * 60)
     print("NodeSeek & DeepFlood 自动签到程序启动")
     print(f"定时配置：每天 {env.schedule_start_hour}~{env.schedule_end_hour} 点之间随机执行")
+    print(f"启动时立即执行签到：{'是' if env.run_on_start else '否'}")
     print("=" * 60)
+
+    # 启动时立即执行一次签到（如果配置了 RUN_ON_START=true）
+    if env.run_on_start:
+        print("\n检测到 RUN_ON_START=true，启动时立即执行签到...")
+        try:
+            run_signin_task()
+        except Exception as e:
+            print(f"启动时签到执行出错：{str(e)}")
 
     while True:
         try:
@@ -547,37 +596,8 @@ def main():
             print(f"开始执行签到任务 - {get_current_time()}")
             print("=" * 60)
 
-            # 执行NodeSeek签到
-            if env.ns_cookie:
-                nodeseek = NodeSeekForum(
-                    base_url=NODESEEK_URL,
-                    cookie=env.ns_cookie,
-                    member_id=env.ns_member_id,
-                    random_signin=env.ns_random,
-                )
-                run_forum_signin(nodeseek, "NodeSeek")
-            else:
-                print("未配置NodeSeek的Cookie（NS_COOKIE），跳过NodeSeek签到")
-
-            # 执行DeepFlood签到
-            if env.df_cookie:
-                deepflood = DeepFloodForum(
-                    base_url=DEEPFLOOD_URL,
-                    cookie=env.df_cookie,
-                    member_id=env.df_member_id,
-                    random_signin=env.df_random,
-                )
-                run_forum_signin(deepflood, "DeepFlood")
-            else:
-                print("未配置DeepFlood的Cookie（DF_COOKIE），跳过DeepFlood签到")
-
-            # 更新上次执行日期（防止同一天重复签到）
-            global last_run_date
-            last_run_date = datetime.now().date()
-
-            print("=" * 60)
-            print(f"签到任务执行完成 - {get_current_time()}")
-            print("=" * 60 + "\n")
+            # 执行签到任务
+            run_signin_task()
 
         except KeyboardInterrupt:
             print("\n程序被用户中断")
